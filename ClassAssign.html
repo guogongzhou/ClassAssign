@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阳光分班系统（脱敏版）</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #1a5276 0%, #2874a6 50%, #3498db 100%);
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="80" cy="20" r="15" fill="rgba(255,220,100,0.3)"/><circle cx="85" cy="18" r="12" fill="rgba(255,200,80,0.2)"/></svg>') no-repeat 90% 5%, 
+                        linear-gradient(to bottom, rgba(255,255,255,0.1) 0%, transparent 30%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .container { position: relative; z-index: 1; padding: 20px; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Header区域 */
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0,0,0,0.3); border-radius: 10px; padding: 15px 25px;
+            margin-bottom: 20px; border: 1px solid rgba(255,204,0,0.5);
+        }
+        .header-left { display: flex; flex-direction: column; }
+        .header-center { text-align: center; flex: 1; }
+        .header-center h1 { margin: 0; font-size: 28px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .header-right { display: flex; gap: 20px; }
+        
+        /* 时间显示 */
+        .time-display {
+            background: rgba(0,0,0,0.4); border: 2px solid #ffcc00; border-radius: 8px;
+            padding: 8px 15px; text-align: center; min-width: 200px;
+        }
+        .time-display .label { font-size: 12px; color: #ffcc00; margin-bottom: 3px; }
+        .time-display .time { font-size: 16px; font-weight: bold; font-family: monospace; }
+        
+        /* 统计徽章 */
+        .stat-badge {
+            background: rgba(0,0,0,0.4); border: 2px solid #ffcc00; border-radius: 8px;
+            padding: 8px 15px; text-align: center; min-width: 100px;
+        }
+        .stat-badge .label { font-size: 12px; color: #ffcc00; margin-bottom: 3px; }
+        .stat-badge .value { font-size: 24px; font-weight: bold; color: #ffcc00; }
+        
+        /* 主体区域 */
+        .main-container { display: flex; flex: 1; gap: 20px; min-height: 0; }
+        
+        /* 左侧面板 */
+        .left-panel { 
+            width: 320px; background: rgba(0, 0, 0, 0.4); border-radius: 10px; 
+            padding: 15px; display: flex; flex-direction: column; 
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .left-panel h3 { 
+            margin: 0 0 10px 0; text-align: center; border-bottom: 1px solid #ffcc00; 
+            padding-bottom: 10px; color: #ffcc00; font-size: 16px; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .progress-bar {
+            height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; margin-bottom: 10px; overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%; background: linear-gradient(90deg, #ffcc00, #ff9900);
+            transition: width 1s ease; border-radius: 3px;
+        }
+        .student-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
+        .student-list li { 
+            padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.1); 
+            font-size: 13px; background: rgba(255,255,255,0.05); margin-bottom: 2px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .student-list li:hover { background: rgba(255,255,255,0.1); }
+        .student-list .stu-info { display: flex; flex-direction: column; gap: 2px; }
+        .student-list .stu-name { font-weight: bold; color: #fff; }
+        .student-list .stu-detail { font-size: 11px; color: rgba(255,255,255,0.6); }
+        .student-list .stu-origin { font-size: 11px; color: #87ceeb; }
+        .student-list .stu-seq { color: rgba(255,255,255,0.4); font-size: 11px; min-width: 30px; text-align: right; }
+        
+        /* 中间面板 */
+        .center-panel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .current-student { 
+            background: linear-gradient(135deg, rgba(0,120,212,0.8), rgba(0,80,160,0.9));
+            border: 3px solid #ffcc00; border-radius: 15px; padding: 25px 50px; 
+            font-size: 28px; text-align: center; margin-bottom: 30px; 
+            box-shadow: 0 0 30px rgba(255,204,0,0.4), inset 0 0 20px rgba(255,255,255,0.1);
+            min-width: 500px; animation: none;
+        }
+        .current-student .stu-name { font-size: 36px; font-weight: bold; color: #ffcc00; margin-bottom: 10px; }
+        .current-student .stu-id { font-size: 16px; color: rgba(255,255,255,0.8); margin-bottom: 8px; }
+        .current-student .stu-arrow { font-size: 24px; color: #00ff00; margin-top: 10px; }
+        
+        /* 班级网格 */
+        .class-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 15px; width: 100%; margin-top: 20px; }
+        .class-box { 
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+            border: 2px solid rgba(255,204,0,0.6); border-radius: 12px; padding: 15px; 
+            text-align: center; height: 130px; display: flex; flex-direction: column; 
+            justify-content: space-between; cursor: pointer; transition: all 1s;
+        }
+        .class-box:hover { 
+            background: linear-gradient(135deg, rgba(255,204,0,0.3), rgba(255,153,0,0.2));
+            border-color: #ffcc00; transform: translateY(-8px); box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        .class-name { font-size: 20px; font-weight: bold; color: #fff; }
+        .class-count { font-size: 36px; font-weight: bold; color: #ffcc00; text-shadow: 0 0 10px rgba(255,204,0,0.5); }
+        .class-tip { font-size: 12px; color: rgba(255,255,255,0.6); }
+        
+        /* 控制按钮 */
+        .controls { text-align: center; margin-top: 20px; }
+        button { padding: 12px 30px; font-size: 18px; border: none; border-radius: 8px; cursor: pointer; background: linear-gradient(135deg, #ffcc00, #ff9900); color: #000; font-weight: bold; margin: 0 15px; transition: all 1s; box-shadow: 0 4px 15px rgba(255,153,0,0.4); }
+        button:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(255,153,0,0.6); }
+        button:active { transform: translateY(0); }
+        #pauseBtn { background: linear-gradient(135deg, #ff9800, #ff5722); }
+        #pauseBtn:hover { box-shadow: 0 6px 20px rgba(255,87,34,0.6); }
+        #pauseBtn.resume { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        #pauseBtn.resume:hover { box-shadow: 0 6px 20px rgba(76,175,80,0.6); }
+        
+        /* 模态框 */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); justify-content: center; align-items: center; }
+        .modal-content { background: linear-gradient(135deg, #1a3a5c, #0d2137); padding: 25px; border-radius: 15px; width: 450px; max-height: 500px; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5); border: 2px solid #ffcc00; }
+        .close { color: #ffcc00; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: #fff; }
+        .modal-title { text-align: center; margin-bottom: 15px; color: #ffcc00; font-size: 22px; }
+        .modal-list { list-style: none; padding: 0; margin: 0; }
+        .modal-list li { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .modal-list .name { font-weight: bold; color: #fff; }
+        .modal-list .id-card { color: rgba(255,255,255,0.6); font-size: 12px; }
+        
+        /* 动画 */
+        @keyframes flash { 
+            0% { transform: scale(1); box-shadow: 0 0 30px rgba(255,204,0,0.4); } 
+            50% { transform: scale(1.05); box-shadow: 0 0 50px rgba(255,204,0,0.8), 0 0 80px rgba(255,153,0,0.5); } 
+            100% { transform: scale(1); box-shadow: 0 0 30px rgba(255,204,0,0.4); } 
+        }
+        .animate-flash { animation: flash 1s ease-in-out; }
+        
+        @keyframes slideIn {
+            0% { opacity: 0; transform: translateY(-20px) scale(0.9); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .animate-slide-in { animation: slideIn 1s ease-out; }
+        
+        @keyframes countPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); color: #fff; }
+        }
+        .animate-count { animation: countPulse 1s ease-out; }
+        
+        /* 飞向班级动画 */
+        @keyframes flyToTarget {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--target-x), var(--target-y)) scale(0.2); opacity: 0; }
+        }
+        .animate-fly { animation: flyToTarget 1s ease-in forwards; }
+        
+        .fly-card {
+            position: fixed;
+            background: linear-gradient(135deg, #1a3a5c, #0d2137);
+            border: 2px solid #ffcc00;
+            border-radius: 12px;
+            padding: 15px 25px;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 0 30px rgba(255,204,0,0.6);
+        }
+        
+        @keyframes classGlow {
+            0% { box-shadow: 0 0 20px rgba(255,153,0,0.3); }
+            50% { box-shadow: 0 0 40px rgba(255,204,0,0.8), 0 0 60px rgba(255,153,0,0.6); transform: scale(1.05); }
+            100% { box-shadow: 0 0 20px rgba(255,153,0,0.3); }
+        }
+        .animate-class-glow { animation: classGlow 1s ease-out; }
+        
+        /* 滚动条样式 */
+        .student-list::-webkit-scrollbar { width: 6px; }
+        .student-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        .student-list::-webkit-scrollbar-thumb { background: #ffcc00; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="time-display">
+                    <div class="label">当前时间</div>
+                    <div class="time" id="current-time">--</div>
+                </div>
+            </div>
+            <div class="header-center">
+                <h1>XX市义务教育阳光分班系统（演示）</h1>
+            </div>
+            <div class="header-right">
+                <div class="stat-badge">
+                    <div class="label">报名人数</div>
+                    <div class="value">420</div>
+                </div>
+                <div class="stat-badge">
+                    <div class="label">班级数量</div>
+                    <div class="value">7</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-container">
+            <div class="left-panel">
+                <h3>待分配学生 <span id="remaining-count">420</span> 人</h3>
+                <div class="progress-bar"><div class="fill" id="progress-fill" style="width: 0%"></div></div>
+                <ul class="student-list" id="unassigned-list"></ul>
+            </div>
+
+            <div class="center-panel">
+                <div class="current-student" id="current-student">
+                    <div style="color: rgba(255,255,255,0.7);">等待分班...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="fly-container"></div>
+
+        <div class="class-grid" id="class-grid"></div>
+        
+        <div class="controls">
+            <button id="startBtn">开始分班</button>
+            <button id="pauseBtn" style="display: none;">暂停</button>
+            <button id="resetBtn">重置</button>
+            <button id="exportBtn">导出结果</button>
+        </div>
+    </div>
+
+    <!-- 弹窗容器 -->
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 class="modal-title" id="modalTitle">班级列表</h2>
+            <ul class="modal-list" id="modalList"></ul>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 学生数据配置 - 可替换为实际数据
+        // ==========================================
+        // 方式1: 直接定义JSON数据（替换下方生成代码即可）
+        // const STUDENTS_DATA = null; // 设置为null则自动生成示例数据
+        
+        // 方式2: 直接在此处定义学生数据（取消注释并填入）
+       
+const STUDENTS_DATA = [{"name":"王浩然","idCard":"420601201001010001","originClass":"6年级1班"},{"name":"李思远","idCard":"420601201001020002","originClass":"6年级1班"},{"name":"张子轩","idCard":"420601201001030003","originClass":"6年级1班"},{"name":"刘宇航","idCard":"420601201001040004","originClass":"6年级1班"},{"name":"陈梓涵","idCard":"420601201001050005","originClass":"6年级1班"},{"name":"杨一鸣","idCard":"420601201001060006","originClass":"6年级1班"},{"name":"赵子墨","idCard":"420601201001070007","originClass":"6年级1班"},{"name":"黄子涵","idCard":"420601201001080008","originClass":"6年级1班"},{"name":"周梦琪","idCard":"420601201001090009","originClass":"6年级1班"},{"name":"吴子睿","idCard":"420601201001100010","originClass":"6年级1班"},{"name":"徐佳欣","idCard":"420601201001110011","originClass":"6年级1班"},{"name":"孙艺馨","idCard":"420601201001120012","originClass":"6年级1班"},{"name":"胡子昂","idCard":"420601201001130013","originClass":"6年级1班"},{"name":"朱天宇","idCard":"420601201001140014","originClass":"6年级1班"},{"name":"高若曦","idCard":"420601201001150015","originClass":"6年级1班"},{"name":"林俊杰","idCard":"420601201001160016","originClass":"6年级1班"},{"name":"何欣怡","idCard":"420601201001170017","originClass":"6年级1班"},{"name":"郭子谦","idCard":"420601201001180018","originClass":"6年级1班"},{"name":"梁雨桐","idCard":"420601201001190019","originClass":"6年级1班"},{"name":"宋博文","idCard":"420601201001200020","originClass":"6年级1班"},{"name":"唐诗语","idCard":"420601201001210021","originClass":"6年级1班"},{"name":"许泽宇","idCard":"420601201001220022","originClass":"6年级1班"},{"name":"邓晨曦","idCard":"420601201001230023","originClass":"6年级1班"},{"name":"韩子瑜","idCard":"420601201001240024","originClass":"6年级1班"},{"name":"曹思颖","idCard":"420601201001250025","originClass":"6年级1班"},{"name":"彭俊熙","idCard":"420601201001260026","originClass":"6年级1班"},{"name":"肖一诺","idCard":"420601201001270027","originClass":"6年级1班"},{"name":"袁梓豪","idCard":"420601201001280028","originClass":"6年级1班"},{"name":"丁雨欣","idCard":"420601201001290029","originClass":"6年级1班"},{"name":"沈承恩","idCard":"420601201001300030","originClass":"6年级1班"},{"name":"余欣悦","idCard":"420601201001310031","originClass":"6年级1班"},{"name":"杜子龙","idCard":"420601201002010032","originClass":"6年级1班"},{"name":"程语桐","idCard":"420601201002020033","originClass":"6年级1班"},{"name":"傅昊然","idCard":"420601201002030034","originClass":"6年级1班"},{"name":"蒋依林","idCard":"420601201002040035","originClass":"6年级1班"},{"name":"蔡嘉怡","idCard":"420601201002050036","originClass":"6年级1班"},{"name":"卢子轩","idCard":"420601201002060037","originClass":"6年级1班"},{"name":"魏铭泽","idCard":"420601201002070038","originClass":"6年级1班"},{"name":"戴云飞","idCard":"420601201002080039","originClass":"6年级1班"},{"name":"贾雅琴","idCard":"420601201002090040","originClass":"6年级1班"},{"name":"潘奕辰","idCard":"420601201002100041","originClass":"6年级1班"},{"name":"范思淼","idCard":"420601201002110042","originClass":"6年级1班"},{"name":"任煜城","idCard":"420601201002120043","originClass":"6年级1班"},{"name":"姜梦洁","idCard":"420601201002130044","originClass":"6年级1班"},{"name":"崔子墨","idCard":"420601201002140045","originClass":"6年级1班"},{"name":"钟皓宇","idCard":"420601201002150046","originClass":"6年级1班"},{"name":"谭心怡","idCard":"420601201002160047","originClass":"6年级1班"},{"name":"廖梓涵","idCard":"420601201002170048","originClass":"6年级1班"},{"name":"邹梓萱","idCard":"420601201002180049","originClass":"6年级1班"},{"name":"熊博涛","idCard":"420601201002190050","originClass":"6年级1班"},{"name":"金浩宇","idCard":"420601201002200051","originClass":"6年级1班"},{"name":"陆子悦","idCard":"420601201002210052","originClass":"6年级1班"},{"name":"郝俊杰","idCard":"420601201002220053","originClass":"6年级1班"},{"name":"孔子墨","idCard":"420601201002230054","originClass":"6年级1班"},{"name":"毛欣怡","idCard":"420601201002240055","originClass":"6年级1班"},{"name":"邱宇轩","idCard":"420601201002250056","originClass":"6年级1班"},{"name":"秦子昂","idCard":"420601201002260057","originClass":"6年级1班"},{"name":"江梓涵","idCard":"420601201002270058","originClass":"6年级1班"},{"name":"史俊熙","idCard":"420601201002280059","originClass":"6年级1班"},{"name":"顾思远","idCard":"420601201002290060","originClass":"6年级1班"},{"name":"孟子谦","idCard":"420601201002300001","originClass":"6年级2班"},{"name":"龙梦琪","idCard":"420601201002310002","originClass":"6年级2班"},{"name":"侯梓豪","idCard":"420601201003010003","originClass":"6年级2班"},{"name":"邵若曦","idCard":"420601201003020004","originClass":"6年级2班"},{"name":"万俊杰","idCard":"420601201003030005","originClass":"6年级2班"},{"name":"段欣怡","idCard":"420601201003040006","originClass":"6年级2班"},{"name":"雷子轩","idCard":"420601201003050007","originClass":"6年级2班"},{"name":"钱子瑜","idCard":"420601201003060008","originClass":"6年级2班"},{"name":"汤梓彤","idCard":"420601201003070009","originClass":"6年级2班"},{"name":"尹语桐","idCard":"420601201003080010","originClass":"6年级2班"},{"name":"易铭泽","idCard":"420601201003090011","originClass":"6年级2班"},{"name":"乔云飞","idCard":"420601201003100012","originClass":"6年级2班"},{"name":"贺雅琴","idCard":"420601201003110013","originClass":"6年级2班"},{"name":"赖奕辰","idCard":"420601201003120014","originClass":"6年级2班"},{"name":"龚思淼","idCard":"420601201003130015","originClass":"6年级2班"},{"name":"文煜城","idCard":"420601201003140016","originClass":"6年级2班"},{"name":"庞子墨","idCard":"420601201003150017","originClass":"6年级2班"},{"name":"樊皓宇","idCard":"420601201003160018","originClass":"6年级2班"},{"name":"兰心怡","idCard":"420601201003170019","originClass":"6年级2班"},{"name":"殷梓涵","idCard":"420601201003180020","originClass":"6年级2班"},{"name":"施子昂","idCard":"420601201003190021","originClass":"6年级2班"},{"name":"陶天宇","idCard":"420601201003200022","originClass":"6年级2班"},{"name":"洪若曦","idCard":"420601201003210023","originClass":"6年级2班"},{"name":"翟俊杰","idCard":"420601201003220024","originClass":"6年级2班"},{"name":"安欣怡","idCard":"420601201003230025","originClass":"6年级2班"},{"name":"颜子轩","idCard":"420601201003240026","originClass":"6年级2班"},{"name":"严铭泽","idCard":"420601201003250027","originClass":"6年级2班"},{"name":"聂云飞","idCard":"420601201003260028","originClass":"6年级2班"},{"name":"向雅琴","idCard":"420601201003270029","originClass":"6年级2班"},{"name":"莫奕辰","idCard":"420601201003280030","originClass":"6年级2班"},{"name":"庄思淼","idCard":"420601201003290031","originClass":"6年级2班"},{"name":"辛煜城","idCard":"420601201003300032","originClass":"6年级2班"},{"name":"管子墨","idCard":"420601201003310033","originClass":"6年级2班"},{"name":"祝皓宇","idCard":"420601201004010034","originClass":"6年级2班"},{"name":"舒心怡","idCard":"420601201004020035","originClass":"6年级2班"},{"name":"柯梓涵","idCard":"420601201004030036","originClass":"6年级2班"},{"name":"缪子昂","idCard":"420601201004040037","originClass":"6年级2班"},{"name":"涂天宇","idCard":"420601201004050038","originClass":"6年级2班"},{"name":"詹若曦","idCard":"420601201004060039","originClass":"6年级2班"},{"name":"凌俊杰","idCard":"420601201004070040","originClass":"6年级2班"},{"name":"毕欣怡","idCard":"420601201004080041","originClass":"6年级2班"},{"name":"季子轩","idCard":"420601201004090042","originClass":"6年级2班"},{"name":"卫铭泽","idCard":"420601201004100043","originClass":"6年级2班"},{"name":"鲍云飞","idCard":"420601201004110044","originClass":"6年级2班"},{"name":"牟雅琴","idCard":"420601201004120045","originClass":"6年级2班"},{"name":"艾奕辰","idCard":"420601201004130046","originClass":"6年级2班"},{"name":"符思淼","idCard":"420601201004140047","originClass":"6年级2班"},{"name":"尤煜城","idCard":"420601201004150048","originClass":"6年级2班"},{"name":"时子墨","idCard":"420601201004160049","originClass":"6年级2班"},{"name":"苗皓宇","idCard":"420601201004170050","originClass":"6年级2班"},{"name":"盛心怡","idCard":"420601201004180051","originClass":"6年级2班"},{"name":"阮梓涵","idCard":"420601201004190052","originClass":"6年级2班"},{"name":"佟子昂","idCard":"420601201004200053","originClass":"6年级2班"},{"name":"伍天宇","idCard":"420601201004210054","originClass":"6年级2班"},{"name":"申若曦","idCard":"420601201004220055","originClass":"6年级2班"},{"name":"丛俊杰","idCard":"420601201004230056","originClass":"6年级2班"},{"name":"岳欣怡","idCard":"420601201004240057","originClass":"6年级2班"},{"name":"覃子轩","idCard":"420601201004250058","originClass":"6年级2班"},{"name":"柳铭泽","idCard":"420601201004260059","originClass":"6年级2班"},{"name":"甄云飞","idCard":"420601201004270060","originClass":"6年级2班"},{"name":"狄雅琴","idCard":"420601201004280001","originClass":"6年级3班"},{"name":"迟奕辰","idCard":"420601201004290002","originClass":"6年级3班"},{"name":"封思淼","idCard":"420601201004300003","originClass":"6年级3班"},{"name":"纪煜城","idCard":"420601201004310004","originClass":"6年级3班"},{"name":"容子墨","idCard":"420601201005010005","originClass":"6年级3班"},{"name":"蔺皓宇","idCard":"420601201005020006","originClass":"6年级3班"},{"name":"师心怡","idCard":"420601201005030007","originClass":"6年级3班"},{"name":"巩梓涵","idCard":"420601201005040008","originClass":"6年级3班"},{"name":"关子昂","idCard":"420601201005050009","originClass":"6年级3班"},{"name":"梅天宇","idCard":"420601201005060010","originClass":"6年级3班"},{"name":"靳若曦","idCard":"420601201005070011","originClass":"6年级3班"},{"name":"曲俊杰","idCard":"420601201005080012","originClass":"6年级3班"},{"name":"尚欣怡","idCard":"420601201005090013","originClass":"6年级3班"},{"name":"裴子轩","idCard":"420601201005100014","originClass":"6年级3班"},{"name":"姚铭泽","idCard":"420601201005110015","originClass":"6年级3班"},{"name":"黎云飞","idCard":"420601201005120016","originClass":"6年级3班"},{"name":"常雅琴","idCard":"420601201005130017","originClass":"6年级3班"},{"name":"武奕辰","idCard":"420601201005140018","originClass":"6年级3班"},{"name":"乔思淼","idCard":"420601201005150019","originClass":"6年级3班"},{"name":"赖煜城","idCard":"420601201005160020","originClass":"6年级3班"},{"name":"龚子墨","idCard":"420601201005170021","originClass":"6年级3班"},{"name":"文皓宇","idCard":"420601201005180022","originClass":"6年级3班"},{"name":"庞心怡","idCard":"420601201005190023","originClass":"6年级3班"},{"name":"樊梓涵","idCard":"420601201005200024","originClass":"6年级3班"},{"name":"兰子昂","idCard":"420601201005210025","originClass":"6年级3班"},{"name":"殷天宇","idCard":"420601201005220026","originClass":"6年级3班"},{"name":"施若曦","idCard":"420601201005230027","originClass":"6年级3班"},{"name":"陶俊杰","idCard":"420601201005240028","originClass":"6年级3班"},{"name":"洪欣怡","idCard":"420601201005250029","originClass":"6年级3班"},{"name":"翟子轩","idCard":"420601201005260030","originClass":"6年级3班"},{"name":"颜铭泽","idCard":"420601201005270031","originClass":"6年级3班"},{"name":"严云飞","idCard":"420601201005280032","originClass":"6年级3班"},{"name":"聂雅琴","idCard":"420601201005290033","originClass":"6年级3班"},{"name":"向浩然","idCard":"420601201005300034","originClass":"6年级3班"},{"name":"莫思远","idCard":"420601201005310035","originClass":"6年级3班"},{"name":"庄子轩","idCard":"420601201006010036","originClass":"6年级3班"},{"name":"辛宇航","idCard":"420601201006020037","originClass":"6年级3班"},{"name":"管梓涵","idCard":"420601201006030038","originClass":"6年级3班"},{"name":"祝一鸣","idCard":"420601201006040039","originClass":"6年级3班"},{"name":"舒子墨","idCard":"420601201006050040","originClass":"6年级3班"},{"name":"柯子涵","idCard":"420601201006060041","originClass":"6年级3班"},{"name":"缪梦琪","idCard":"420601201006070042","originClass":"6年级3班"},{"name":"涂子睿","idCard":"420601201006080043","originClass":"6年级3班"},{"name":"詹佳欣","idCard":"420601201006090044","originClass":"6年级3班"},{"name":"凌艺馨","idCard":"420601201006100045","originClass":"6年级3班"},{"name":"毕子昂","idCard":"420601201006110046","originClass":"6年级3班"},{"name":"季天宇","idCard":"420601201006120047","originClass":"6年级3班"},{"name":"卫若曦","idCard":"420601201006130048","originClass":"6年级3班"},{"name":"鲍俊杰","idCard":"420601201006140049","originClass":"6年级3班"},{"name":"牟欣怡","idCard":"420601201006150050","originClass":"6年级3班"},{"name":"艾子谦","idCard":"420601201006160051","originClass":"6年级3班"},{"name":"符雨桐","idCard":"420601201006170052","originClass":"6年级3班"},{"name":"尤博文","idCard":"420601201006180053","originClass":"6年级3班"},{"name":"时诗语","idCard":"420601201006190054","originClass":"6年级3班"},{"name":"苗泽宇","idCard":"420601201006200055","originClass":"6年级3班"},{"name":"盛晨曦","idCard":"420601201006210056","originClass":"6年级3班"},{"name":"阮子瑜","idCard":"420601201006220057","originClass":"6年级3班"},{"name":"佟思颖","idCard":"420601201006230058","originClass":"6年级3班"},{"name":"伍俊熙","idCard":"420601201006240059","originClass":"6年级3班"},{"name":"申一诺","idCard":"420601201006250060","originClass":"6年级3班"},{"name":"丛梓豪","idCard":"420601201006260001","originClass":"6年级4班"},{"name":"岳雨欣","idCard":"420601201006270002","originClass":"6年级4班"},{"name":"覃承恩","idCard":"420601201006280003","originClass":"6年级4班"},{"name":"柳欣悦","idCard":"420601201006290004","originClass":"6年级4班"},{"name":"甄子龙","idCard":"420601201006300005","originClass":"6年级4班"},{"name":"狄语桐","idCard":"420601201006310006","originClass":"6年级4班"},{"name":"迟昊然","idCard":"420601201007010007","originClass":"6年级4班"},{"name":"封依林","idCard":"420601201007020008","originClass":"6年级4班"},{"name":"纪嘉怡","idCard":"420601201007030009","originClass":"6年级4班"},{"name":"容子轩","idCard":"420601201007040010","originClass":"6年级4班"},{"name":"蔺铭泽","idCard":"420601201007050011","originClass":"6年级4班"},{"name":"师云飞","idCard":"420601201007060012","originClass":"6年级4班"},{"name":"巩雅琴","idCard":"420601201007070013","originClass":"6年级4班"},{"name":"关奕辰","idCard":"420601201007080014","originClass":"6年级4班"},{"name":"梅思淼","idCard":"420601201007090015","originClass":"6年级4班"},{"name":"靳煜城","idCard":"420601201007100016","originClass":"6年级4班"},{"name":"曲梦洁","idCard":"420601201007110017","originClass":"6年级4班"},{"name":"尚子墨","idCard":"420601201007120018","originClass":"6年级4班"},{"name":"裴皓宇","idCard":"420601201007130019","originClass":"6年级4班"},{"name":"姚心怡","idCard":"420601201007140020","originClass":"6年级4班"},{"name":"黎梓涵","idCard":"420601201007150021","originClass":"6年级4班"},{"name":"常梓萱","idCard":"420601201007160022","originClass":"6年级4班"},{"name":"武博涛","idCard":"420601201007170023","originClass":"6年级4班"},{"name":"王浩宇","idCard":"420601201007180024","originClass":"6年级4班"},{"name":"李子悦","idCard":"420601201007190025","originClass":"6年级4班"},{"name":"张俊杰","idCard":"420601201007200026","originClass":"6年级4班"},{"name":"刘子墨","idCard":"420601201007210027","originClass":"6年级4班"},{"name":"陈欣怡","idCard":"420601201007220028","originClass":"6年级4班"},{"name":"杨宇轩","idCard":"420601201007230029","originClass":"6年级4班"},{"name":"赵子昂","idCard":"420601201007240030","originClass":"6年级4班"},{"name":"黄梓涵","idCard":"420601201007250031","originClass":"6年级4班"},{"name":"周俊熙","idCard":"420601201007260032","originClass":"6年级4班"},{"name":"吴思远","idCard":"420601201007270033","originClass":"6年级4班"},{"name":"徐子谦","idCard":"420601201007280034","originClass":"6年级4班"},{"name":"孙梦琪","idCard":"420601201007290035","originClass":"6年级4班"},{"name":"胡梓豪","idCard":"420601201007300036","originClass":"6年级4班"},{"name":"朱若曦","idCard":"420601201007310037","originClass":"6年级4班"},{"name":"高俊杰","idCard":"420601201008010038","originClass":"6年级4班"},{"name":"林欣怡","idCard":"420601201008020039","originClass":"6年级4班"},{"name":"何子轩","idCard":"420601201008030040","originClass":"6年级4班"},{"name":"郭子瑜","idCard":"420601201008040041","originClass":"6年级4班"},{"name":"梁梓彤","idCard":"420601201008050042","originClass":"6年级4班"},{"name":"宋语桐","idCard":"420601201008060043","originClass":"6年级4班"},{"name":"唐铭泽","idCard":"420601201008070044","originClass":"6年级4班"},{"name":"许云飞","idCard":"420601201008080045","originClass":"6年级4班"},{"name":"邓雅琴","idCard":"420601201008090046","originClass":"6年级4班"},{"name":"韩奕辰","idCard":"420601201008100047","originClass":"6年级4班"},{"name":"曹思淼","idCard":"420601201008110048","originClass":"6年级4班"},{"name":"彭煜城","idCard":"420601201008120049","originClass":"6年级4班"},{"name":"肖子墨","idCard":"420601201008130050","originClass":"6年级4班"},{"name":"袁皓宇","idCard":"420601201008140051","originClass":"6年级4班"},{"name":"丁心怡","idCard":"420601201008150052","originClass":"6年级4班"},{"name":"沈梓涵","idCard":"420601201008160053","originClass":"6年级4班"},{"name":"余子昂","idCard":"420601201008170054","originClass":"6年级4班"},{"name":"杜天宇","idCard":"420601201008180055","originClass":"6年级4班"},{"name":"程若曦","idCard":"420601201008190056","originClass":"6年级4班"},{"name":"傅俊杰","idCard":"420601201008200057","originClass":"6年级4班"},{"name":"蒋欣怡","idCard":"420601201008210058","originClass":"6年级4班"},{"name":"蔡子轩","idCard":"420601201008220059","originClass":"6年级4班"},{"name":"卢铭泽","idCard":"420601201008230060","originClass":"6年级4班"},{"name":"魏云飞","idCard":"420601201008240001","originClass":"6年级5班"},{"name":"戴雅琴","idCard":"420601201008250002","originClass":"6年级5班"},{"name":"贾奕辰","idCard":"420601201008260003","originClass":"6年级5班"},{"name":"潘思淼","idCard":"420601201008270004","originClass":"6年级5班"},{"name":"范煜城","idCard":"420601201008280005","originClass":"6年级5班"},{"name":"任子墨","idCard":"420601201008290006","originClass":"6年级5班"},{"name":"姜皓宇","idCard":"420601201008300007","originClass":"6年级5班"},{"name":"崔心怡","idCard":"420601201008310008","originClass":"6年级5班"},{"name":"钟梓涵","idCard":"420601201009010009","originClass":"6年级5班"},{"name":"谭子昂","idCard":"420601201009020010","originClass":"6年级5班"},{"name":"廖天宇","idCard":"420601201009030011","originClass":"6年级5班"},{"name":"邹若曦","idCard":"420601201009040012","originClass":"6年级5班"},{"name":"熊俊杰","idCard":"420601201009050013","originClass":"6年级5班"},{"name":"金欣怡","idCard":"420601201009060014","originClass":"6年级5班"},{"name":"陆子轩","idCard":"420601201009070015","originClass":"6年级5班"},{"name":"郝铭泽","idCard":"420601201009080016","originClass":"6年级5班"},{"name":"孔云飞","idCard":"420601201009090017","originClass":"6年级5班"},{"name":"毛雅琴","idCard":"420601201009100018","originClass":"6年级5班"},{"name":"邱奕辰","idCard":"420601201009110019","originClass":"6年级5班"},{"name":"秦思淼","idCard":"420601201009120020","originClass":"6年级5班"},{"name":"江煜城","idCard":"420601201009130021","originClass":"6年级5班"},{"name":"史子墨","idCard":"420601201009140022","originClass":"6年级5班"},{"name":"顾皓宇","idCard":"420601201009150023","originClass":"6年级5班"},{"name":"孟心怡","idCard":"420601201009160024","originClass":"6年级5班"},{"name":"龙梓涵","idCard":"420601201009170025","originClass":"6年级5班"},{"name":"侯子昂","idCard":"420601201009180026","originClass":"6年级5班"},{"name":"邵天宇","idCard":"420601201009190027","originClass":"6年级5班"},{"name":"万若曦","idCard":"420601201009200028","originClass":"6年级5班"},{"name":"段俊杰","idCard":"420601201009210029","originClass":"6年级5班"},{"name":"雷欣怡","idCard":"420601201009220030","originClass":"6年级5班"},{"name":"钱子轩","idCard":"420601201009230031","originClass":"6年级5班"},{"name":"汤铭泽","idCard":"420601201009240032","originClass":"6年级5班"},{"name":"尹云飞","idCard":"420601201009250033","originClass":"6年级5班"},{"name":"易雅琴","idCard":"420601201009260034","originClass":"6年级5班"},{"name":"乔奕辰","idCard":"420601201009270035","originClass":"6年级5班"},{"name":"贺思淼","idCard":"420601201009280036","originClass":"6年级5班"},{"name":"赖煜城","idCard":"420601201009290037","originClass":"6年级5班"},{"name":"龚子墨","idCard":"420601201009300038","originClass":"6年级5班"},{"name":"文皓宇","idCard":"420601201009310039","originClass":"6年级5班"},{"name":"庞心怡","idCard":"420601201010010040","originClass":"6年级5班"},{"name":"樊梓涵","idCard":"420601201010020041","originClass":"6年级5班"},{"name":"兰子昂","idCard":"420601201010030042","originClass":"6年级5班"},{"name":"殷天宇","idCard":"420601201010040043","originClass":"6年级5班"},{"name":"施若曦","idCard":"420601201010050044","originClass":"6年级5班"},{"name":"陶俊杰","idCard":"420601201010060045","originClass":"6年级5班"},{"name":"洪欣怡","idCard":"420601201010070046","originClass":"6年级5班"},{"name":"翟子轩","idCard":"420601201010080047","originClass":"6年级5班"},{"name":"安铭泽","idCard":"420601201010090048","originClass":"6年级5班"},{"name":"颜云飞","idCard":"420601201010100049","originClass":"6年级5班"},{"name":"严雅琴","idCard":"420601201010110050","originClass":"6年级5班"},{"name":"聂奕辰","idCard":"420601201010120051","originClass":"6年级5班"},{"name":"向思淼","idCard":"420601201010130052","originClass":"6年级5班"},{"name":"莫煜城","idCard":"420601201010140053","originClass":"6年级5班"},{"name":"庄子墨","idCard":"420601201010150054","originClass":"6年级5班"},{"name":"辛皓宇","idCard":"420601201010160055","originClass":"6年级5班"},{"name":"管心怡","idCard":"420601201010170056","originClass":"6年级5班"},{"name":"祝梓涵","idCard":"420601201010180057","originClass":"6年级5班"},{"name":"舒子昂","idCard":"420601201010190058","originClass":"6年级5班"},{"name":"柯天宇","idCard":"420601201010200059","originClass":"6年级5班"},{"name":"缪若曦","idCard":"420601201010210060","originClass":"6年级5班"},{"name":"涂俊杰","idCard":"420601201010220001","originClass":"6年级6班"},{"name":"詹欣怡","idCard":"420601201010230002","originClass":"6年级6班"},{"name":"凌子轩","idCard":"420601201010240003","originClass":"6年级6班"},{"name":"毕铭泽","idCard":"420601201010250004","originClass":"6年级6班"},{"name":"季云飞","idCard":"420601201010260005","originClass":"6年级6班"},{"name":"卫雅琴","idCard":"420601201010270006","originClass":"6年级6班"},{"name":"鲍浩然","idCard":"420601201010280007","originClass":"6年级6班"},{"name":"牟思远","idCard":"420601201010290008","originClass":"6年级6班"},{"name":"艾子轩","idCard":"420601201010300009","originClass":"6年级6班"},{"name":"符宇航","idCard":"420601201010310010","originClass":"6年级6班"},{"name":"尤梓涵","idCard":"420601201011010011","originClass":"6年级6班"},{"name":"时一鸣","idCard":"420601201011020012","originClass":"6年级6班"},{"name":"苗子墨","idCard":"420601201011030013","originClass":"6年级6班"},{"name":"盛子涵","idCard":"420601201011040014","originClass":"6年级6班"},{"name":"阮梦琪","idCard":"420601201011050015","originClass":"6年级6班"},{"name":"佟子睿","idCard":"420601201011060016","originClass":"6年级6班"},{"name":"伍佳欣","idCard":"420601201011070017","originClass":"6年级6班"},{"name":"申艺馨","idCard":"420601201011080018","originClass":"6年级6班"},{"name":"丛子昂","idCard":"420601201011090019","originClass":"6年级6班"},{"name":"岳天宇","idCard":"420601201011100020","originClass":"6年级6班"},{"name":"覃若曦","idCard":"420601201011110021","originClass":"6年级6班"},{"name":"柳俊杰","idCard":"420601201011120022","originClass":"6年级6班"},{"name":"甄欣怡","idCard":"420601201011130023","originClass":"6年级6班"},{"name":"狄子谦","idCard":"420601201011140024","originClass":"6年级6班"},{"name":"迟雨桐","idCard":"420601201011150025","originClass":"6年级6班"},{"name":"封博文","idCard":"420601201011160026","originClass":"6年级6班"},{"name":"纪诗语","idCard":"420601201011170027","originClass":"6年级6班"},{"name":"容泽宇","idCard":"420601201011180028","originClass":"6年级6班"},{"name":"蔺晨曦","idCard":"420601201011190029","originClass":"6年级6班"},{"name":"师子瑜","idCard":"420601201011200030","originClass":"6年级6班"},{"name":"巩思颖","idCard":"420601201011210031","originClass":"6年级6班"},{"name":"关俊熙","idCard":"420601201011220032","originClass":"6年级6班"},{"name":"梅一诺","idCard":"420601201011230033","originClass":"6年级6班"},{"name":"靳梓豪","idCard":"420601201011240034","originClass":"6年级6班"},{"name":"曲雨欣","idCard":"420601201011250035","originClass":"6年级6班"},{"name":"尚承恩","idCard":"420601201011260036","originClass":"6年级6班"},{"name":"裴欣悦","idCard":"420601201011270037","originClass":"6年级6班"},{"name":"姚子龙","idCard":"420601201011280038","originClass":"6年级6班"},{"name":"黎语桐","idCard":"420601201011290039","originClass":"6年级6班"},{"name":"常昊然","idCard":"420601201011300040","originClass":"6年级6班"},{"name":"武依林","idCard":"420601201011310041","originClass":"6年级6班"},{"name":"乔嘉怡","idCard":"420601201012010042","originClass":"6年级6班"},{"name":"赖子轩","idCard":"420601201012020043","originClass":"6年级6班"},{"name":"龚铭泽","idCard":"420601201012030044","originClass":"6年级6班"},{"name":"文云飞","idCard":"420601201012040045","originClass":"6年级6班"},{"name":"庞雅琴","idCard":"420601201012050046","originClass":"6年级6班"},{"name":"樊奕辰","idCard":"420601201012060047","originClass":"6年级6班"},{"name":"兰思淼","idCard":"420601201012070048","originClass":"6年级6班"},{"name":"殷煜城","idCard":"420601201012080049","originClass":"6年级6班"},{"name":"施梦洁","idCard":"420601201012090050","originClass":"6年级6班"},{"name":"陶子墨","idCard":"420601201012100051","originClass":"6年级6班"},{"name":"洪皓宇","idCard":"420601201012110052","originClass":"6年级6班"},{"name":"翟心怡","idCard":"420601201012120053","originClass":"6年级6班"},{"name":"颜梓涵","idCard":"420601201012130054","originClass":"6年级6班"},{"name":"严梓萱","idCard":"420601201012140055","originClass":"6年级6班"},{"name":"聂博涛","idCard":"420601201012150056","originClass":"6年级6班"},{"name":"向浩宇","idCard":"420601201012160057","originClass":"6年级6班"},{"name":"莫子悦","idCard":"420601201012170058","originClass":"6年级6班"},{"name":"庄俊杰","idCard":"420601201012180059","originClass":"6年级6班"},{"name":"辛子墨","idCard":"420601201012190060","originClass":"6年级6班"},{"name":"管欣怡","idCard":"420601201012200001","originClass":"6年级7班"},{"name":"祝宇轩","idCard":"420601201012210002","originClass":"6年级7班"},{"name":"舒子昂","idCard":"420601201012220003","originClass":"6年级7班"},{"name":"柯梓涵","idCard":"420601201012230004","originClass":"6年级7班"},{"name":"缪俊熙","idCard":"420601201012240005","originClass":"6年级7班"},{"name":"涂思远","idCard":"420601201012250006","originClass":"6年级7班"},{"name":"詹子谦","idCard":"420601201012260007","originClass":"6年级7班"},{"name":"凌梦琪","idCard":"420601201012270008","originClass":"6年级7班"},{"name":"毕梓豪","idCard":"420601201012280009","originClass":"6年级7班"},{"name":"季若曦","idCard":"420601201012290010","originClass":"6年级7班"},{"name":"卫俊杰","idCard":"420601201012300011","originClass":"6年级7班"},{"name":"鲍欣怡","idCard":"420601201012310012","originClass":"6年级7班"},{"name":"牟子轩","idCard":"420601201013010013","originClass":"6年级7班"},{"name":"艾子瑜","idCard":"420601201013020014","originClass":"6年级7班"},{"name":"符梓彤","idCard":"420601201013030015","originClass":"6年级7班"},{"name":"尤语桐","idCard":"420601201013040016","originClass":"6年级7班"},{"name":"时铭泽","idCard":"420601201013050017","originClass":"6年级7班"},{"name":"苗云飞","idCard":"420601201013060018","originClass":"6年级7班"},{"name":"盛雅琴","idCard":"420601201013070019","originClass":"6年级7班"},{"name":"阮奕辰","idCard":"420601201013080020","originClass":"6年级7班"},{"name":"佟思淼","idCard":"420601201013090021","originClass":"6年级7班"},{"name":"伍煜城","idCard":"420601201013100022","originClass":"6年级7班"},{"name":"申子墨","idCard":"420601201013110023","originClass":"6年级7班"},{"name":"丛皓宇","idCard":"420601201013120024","originClass":"6年级7班"},{"name":"岳心怡","idCard":"420601201013130025","originClass":"6年级7班"},{"name":"覃梓涵","idCard":"420601201013140026","originClass":"6年级7班"},{"name":"柳子昂","idCard":"420601201013150027","originClass":"6年级7班"},{"name":"甄天宇","idCard":"420601201013160028","originClass":"6年级7班"},{"name":"狄若曦","idCard":"420601201013170029","originClass":"6年级7班"},{"name":"迟俊杰","idCard":"420601201013180030","originClass":"6年级7班"},{"name":"封欣怡","idCard":"420601201013190031","originClass":"6年级7班"},{"name":"纪子轩","idCard":"420601201013200032","originClass":"6年级7班"},{"name":"容铭泽","idCard":"420601201013210033","originClass":"6年级7班"},{"name":"蔺云飞","idCard":"420601201013220034","originClass":"6年级7班"},{"name":"师雅琴","idCard":"420601201013230035","originClass":"6年级7班"},{"name":"巩奕辰","idCard":"420601201013240036","originClass":"6年级7班"},{"name":"关思淼","idCard":"420601201013250037","originClass":"6年级7班"},{"name":"梅煜城","idCard":"420601201013260038","originClass":"6年级7班"},{"name":"靳子墨","idCard":"420601201013270039","originClass":"6年级7班"},{"name":"曲皓宇","idCard":"420601201013280040","originClass":"6年级7班"},{"name":"尚心怡","idCard":"420601201013290041","originClass":"6年级7班"},{"name":"裴梓涵","idCard":"420601201013300042","originClass":"6年级7班"},{"name":"姚子昂","idCard":"420601201013310043","originClass":"6年级7班"},{"name":"黎天宇","idCard":"420601201014010044","originClass":"6年级7班"},{"name":"常若曦","idCard":"420601201014020045","originClass":"6年级7班"},{"name":"武俊杰","idCard":"420601201014030046","originClass":"6年级7班"},{"name":"王欣怡","idCard":"420601201014040047","originClass":"6年级7班"},{"name":"李子轩","idCard":"420601201014050048","originClass":"6年级7班"},{"name":"张铭泽","idCard":"420601201014060049","originClass":"6年级7班"},{"name":"刘云飞","idCard":"420601201014070050","originClass":"6年级7班"},{"name":"陈雅琴","idCard":"420601201014080051","originClass":"6年级7班"},{"name":"杨奕辰","idCard":"420601201014090052","originClass":"6年级7班"},{"name":"赵思淼","idCard":"420601201014100053","originClass":"6年级7班"},{"name":"黄煜城","idCard":"420601201014110054","originClass":"6年级7班"},{"name":"周子墨","idCard":"420601201014120055","originClass":"6年级7班"},{"name":"吴皓宇","idCard":"420601201014130056","originClass":"6年级7班"},{"name":"徐心怡","idCard":"420601201014140057","originClass":"6年级7班"},{"name":"孙梓涵","idCard":"420601201014150058","originClass":"6年级7班"},{"name":"胡子昂","idCard":"420601201014160059","originClass":"6年级7班"},{"name":"朱天宇","idCard":"420601201014170060","originClass":"6年级7班"}];        
+        
+        // 姓名和原班级数据（用于生成示例）
+        const surnames = ['赵', '钱', '孙', '李', '周', '吴', '郑', '王', '冯', '陈', '褚', '卫', '蒋', '沈', '韩', '杨', '朱', '秦', '尤', '许', '何', '吕', '施', '张', '孔', '曹', '严', '华', '金', '魏', '陶', '姜', '戚', '谢', '邹', '喻', '柏', '水', '窦', '章', '云', '苏', '潘', '葛', '奚', '范', '彭', '郎', '鲁', '韦', '昌', '马', '苗', '凤', '花', '方', '俞', '任', '袁', '柳', '鲍', '史', '唐', '费', '廉', '岑', '薛', '雷', '贺', '倪', '汤', '滕', '殷', '罗', '毕', '郝', '邬', '安', '常', '乐', '于', '时', '傅', '皮', '卞', '齐', '康', '伍', '余', '元', '卜', '顾', '孟', '平', '黄', '和', '穆', '萧', '尹'];
+        const givenNames = ['伟', '芳', '娜', '敏', '静', '磊', '军', '洋', '勇', '艳', '杰', '涛', '明', '超', '秀英', '霞', '平', '刚', '桂英', '鑫', '俊杰', '婷婷', '雪', '晨', '浩', '子轩', '雨欣', '浩然', '欣怡', '梓涵', '宇航', '思远', '佳琪', '雅静', '博文', '诗涵', '皓轩', '若曦', '嘉懿', '雨泽'];
+        const originClasses = ['六年级1班', '六年级2班', '六年级3班', '六年级4班', '六年级5班', '六年级6班', '六年级7班'];
+
+        // 生成或加载学生数据
+        function generateStudents(count) {
+            const result = [];
+            for (let i = 0; i < count; i++) {
+                const surname = surnames[Math.floor(Math.random() * surnames.length)];
+                const givenName = givenNames[Math.floor(Math.random() * givenNames.length)];
+                
+                const areaCode = '420601'; // 襄阳
+                const year = Math.floor(Math.random() * (2009 - 1990 + 1) + 1990);
+                const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+                const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+                const seq = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+                const idCard = `${areaCode}${year}${month}${day}${seq}`;
+
+                const originClass = originClasses[Math.floor(Math.random() * originClasses.length)];
+                
+                result.push({ name: surname + givenName, idCard: idCard, originClass: originClass });
+            }
+            return result;
+        }
+
+        // 学生数据：优先使用STUDENTS_DATA，否则自动生成
+        //const students = STUDENTS_DATA || generateStudents(420);
+        const students = STUDENTS_DATA;
+
+
+        // 2. 班级数据定义
+        const classes = [];
+        for (let i = 1; i <= 7; i++) {
+            classes.push({ name: `${i}班`, members: [], count: 0 });
+        }
+
+        let timer = null;
+        let currentPool = [];
+        let isPaused = false;
+        const ALLOCATION_INTERVAL = 100; // 毫秒
+
+        // 3. 更新时间函数
+        function updateTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('current-time').textContent = `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
+        }
+
+        // 4. 初始化界面
+        function init() {
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            const listEl = document.getElementById('unassigned-list');
+            listEl.innerHTML = '';
+            students.forEach((student, index) => {
+                const li = document.createElement('li');
+                const maskedId = student.idCard.slice(0, 6) + '********' + student.idCard.slice(-4);
+                li.innerHTML = `
+                    <div class="stu-info">
+                        <div class="stu-name">${student.name}</div>
+                        <div class="stu-detail">${maskedId}</div>
+                        <div class="stu-origin">原班级: ${student.originClass}</div>
+                    </div>
+                    <div class="stu-seq">${String(index + 1).padStart(3, '0')}</div>
+                `;
+                listEl.appendChild(li);
+            });
+            
+            const gridEl = document.getElementById('class-grid');
+            gridEl.innerHTML = '';
+            classes.forEach((cls, index) => {
+                const div = document.createElement('div');
+                div.className = 'class-box';
+                div.id = `class-${cls.name}`;
+                div.onclick = () => showClassDetails(index); 
+                div.innerHTML = `
+                    <div class="class-name">${cls.name}</div>
+                    <div class="class-count" id="count-${cls.name}">0</div>
+                    <div class="class-tip">点击查看名单</div>
+                `;
+                gridEl.appendChild(div);
+            });
+
+            document.getElementById('remaining-count').textContent = students.length;
+            document.getElementById('current-student').innerHTML = '<div style="color: rgba(255,255,255,0.7);">等待分班...</div>';
+            document.getElementById('progress-fill').style.width = '0%';
+            document.getElementById('pauseBtn').style.display = 'none';
+            closeModal();
+        }
+
+        // 洗牌算法
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // 5. 分班逻辑
+        function startAllocation() {
+            if (timer) clearInterval(timer);
+            isPaused = false;
+            currentPool = shuffle([...students]);
+            document.getElementById('pauseBtn').style.display = 'inline-block';
+            document.getElementById('pauseBtn').textContent = '暂停';
+            document.getElementById('pauseBtn').classList.remove('resume');
+            
+            timer = setInterval(() => {
+                if (currentPool.length === 0) {
+                    clearInterval(timer);
+                    timer = null;
+                    document.getElementById('current-student').innerHTML = '<div style="color: #00ff00; font-size: 32px;">分班完成!</div>';
+                    document.getElementById('progress-fill').style.width = '100%';
+                    document.getElementById('pauseBtn').style.display = 'none';
+                    return;
+                }
+
+                const studentObj = currentPool.shift();
+                let targetClassIndex = (420 - currentPool.length) % 7; 
+                
+                const targetClass = classes[targetClassIndex];
+                targetClass.members.push(studentObj);
+                targetClass.count = targetClass.members.length;
+
+                // 更新左侧列表
+                const listEl = document.getElementById('unassigned-list');
+                if (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+                document.getElementById('remaining-count').textContent = currentPool.length;
+                
+                // 更新进度条
+                const progress = ((420 - currentPool.length) / 420) * 100;
+                document.getElementById('progress-fill').style.width = progress + '%';
+
+                // 更新中心显示 - 更漂亮的布局
+                const maskedId = studentObj.idCard.slice(0, 6) + '********' + studentObj.idCard.slice(-4);
+                const currentEl = document.getElementById('current-student');
+                currentEl.innerHTML = `
+                    <div class="stu-name">${studentObj.name}</div>
+                    <div class="stu-id">身份证: ${maskedId}</div>
+                    <div class="stu-id">原班级: ${studentObj.originClass}</div>
+                    <div class="stu-arrow">已分配到 ${targetClass.name}</div>
+                `;
+                currentEl.classList.remove('animate-flash');
+                void currentEl.offsetWidth; 
+                currentEl.classList.add('animate-flash');
+
+                // 飞向班级动画
+                flyToClass(studentObj.name, targetClass.name);
+
+                // 更新班级卡片人数
+                const classEl = document.getElementById(`class-${targetClass.name}`);
+                const countEl = document.getElementById(`count-${targetClass.name}`);
+                countEl.textContent = targetClass.count;
+                countEl.classList.remove('animate-count');
+                void countEl.offsetWidth;
+                countEl.classList.add('animate-count');
+
+            }, ALLOCATION_INTERVAL);
+        }
+
+        // 飞向班级动画
+        function flyToClass(studentName, targetClassName) {
+            const centerEl = document.getElementById('current-student');
+            const classEl = document.getElementById(`class-${targetClassName}`);
+            
+            if (!centerEl || !classEl) return;
+            
+            const centerRect = centerEl.getBoundingClientRect();
+            const classRect = classEl.getBoundingClientRect();
+            
+            // 创建飞行卡片
+            const flyCard = document.createElement('div');
+            flyCard.className = 'fly-card';
+            flyCard.textContent = studentName;
+            flyCard.style.left = centerRect.left + 'px';
+            flyCard.style.top = centerRect.top + 'px';
+            document.body.appendChild(flyCard);
+            
+            // 计算偏移量
+            const targetX = classRect.left + classRect.width / 2 - centerRect.left - centerRect.width / 2;
+            const targetY = classRect.top + classRect.height / 2 - centerRect.top - centerRect.height / 2;
+            
+            flyCard.style.setProperty('--target-x', targetX + 'px');
+            flyCard.style.setProperty('--target-y', targetY + 'px');
+            
+            // 触发动画
+            requestAnimationFrame(() => {
+                flyCard.classList.add('animate-fly');
+            });
+            
+            // 动画结束后移除
+            setTimeout(() => {
+                flyCard.remove();
+            }, ALLOCATION_INTERVAL);
+            
+            // 班级卡片发光效果
+            classEl.classList.remove('animate-class-glow');
+            void classEl.offsetWidth;
+            classEl.classList.add('animate-class-glow');
+        }
+
+        // 暂停分班
+        function pauseAllocation() {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+                isPaused = true;
+                document.getElementById('pauseBtn').textContent = '继续';
+                document.getElementById('pauseBtn').classList.add('resume');
+                document.getElementById('current-student').innerHTML += '<div style="color: #ff9800; font-size: 18px; margin-top: 15px;">已暂停</div>';
+            }
+        }
+
+        // 继续分班
+        function resumeAllocation() {
+            if (isPaused && currentPool.length > 0) {
+                isPaused = false;
+                document.getElementById('pauseBtn').textContent = '暂停';
+                document.getElementById('pauseBtn').classList.remove('resume');
+                
+                timer = setInterval(() => {
+                    if (currentPool.length === 0) {
+                        clearInterval(timer);
+                        timer = null;
+                        document.getElementById('current-student').innerHTML = '<div style="color: #00ff00; font-size: 32px;">分班完成!</div>';
+                        document.getElementById('progress-fill').style.width = '100%';
+                        document.getElementById('pauseBtn').style.display = 'none';
+                        return;
+                    }
+
+                    const studentObj = currentPool.shift();
+                    let targetClassIndex = (420 - currentPool.length) % 7; 
+                    
+                    const targetClass = classes[targetClassIndex];
+                    targetClass.members.push(studentObj);
+                    targetClass.count = targetClass.members.length;
+
+                    // 更新左侧列表
+                    const listEl = document.getElementById('unassigned-list');
+                    if (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+                    document.getElementById('remaining-count').textContent = currentPool.length;
+                    
+                    // 更新进度条
+                    const progress = ((420 - currentPool.length) / 420) * 100;
+                    document.getElementById('progress-fill').style.width = progress + '%';
+
+                    // 更新中心显示
+                    const maskedId = studentObj.idCard.slice(0, 6) + '********' + studentObj.idCard.slice(-4);
+                    const currentEl = document.getElementById('current-student');
+                    currentEl.innerHTML = `
+                        <div class="stu-name">${studentObj.name}</div>
+                        <div class="stu-id">身份证: ${maskedId}</div>
+                        <div class="stu-id">原班级: ${studentObj.originClass}</div>
+                        <div class="stu-arrow">已分配到 ${targetClass.name}</div>
+                    `;
+                    currentEl.classList.remove('animate-flash');
+                    void currentEl.offsetWidth; 
+                    currentEl.classList.add('animate-flash');
+
+                    // 飞向班级动画
+                    flyToClass(studentObj.name, targetClass.name);
+
+                    // 更新班级卡片人数
+                    const classEl = document.getElementById(`class-${targetClass.name}`);
+                    const countEl = document.getElementById(`count-${targetClass.name}`);
+                    countEl.textContent = targetClass.count;
+                    countEl.classList.remove('animate-count');
+                    void countEl.offsetWidth;
+                    countEl.classList.add('animate-count');
+
+                }, ALLOCATION_INTERVAL);
+            }
+        }
+
+        // 6. 弹窗查看班级名单
+        function showClassDetails(index) {
+            const cls = classes[index];
+            document.getElementById('modalTitle').textContent = `${cls.name} 学生名单 (${cls.count}人)`;
+            const list = document.getElementById('modalList');
+            list.innerHTML = '';
+            
+            if (cls.members.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = '暂无学生';
+                list.appendChild(li);
+            } else {
+                cls.members.forEach((student, i) => {
+                    const li = document.createElement('li');
+                    const maskedId = student.idCard.slice(0, 6) + '********' + student.idCard.slice(-4);
+                    li.innerHTML = `<span class="name">${i + 1}. ${student.name}</span> <span class="id-card">${maskedId}</span>`;
+                    list.appendChild(li);
+                });
+            }
+            document.getElementById('myModal').style.display = "flex";
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('myModal').style.display = "none";
+        }
+
+        // 重置
+        function resetAllocation() {
+            if (timer) clearInterval(timer);
+            timer = null;
+            isPaused = false;
+            document.getElementById('pauseBtn').style.display = 'none';
+            classes.forEach(cls => {
+                cls.members = [];
+                cls.count = 0;
+            });
+            init(); 
+        }
+
+        // 初始化与事件绑定
+        window.onload = init;
+        document.getElementById('startBtn').addEventListener('click', startAllocation);
+        document.getElementById('pauseBtn').addEventListener('click', function() {
+            if (isPaused) {
+                resumeAllocation();
+            } else {
+                pauseAllocation();
+            }
+        });
+        document.getElementById('resetBtn').addEventListener('click', resetAllocation);
+        document.getElementById('exportBtn').addEventListener('click', exportResults);
+        
+        // 导出分班结果
+        function exportResults() {
+            const wb = XLSX.utils.book_new();
+            
+            classes.forEach((cls, index) => {
+                const data = cls.members.map((student, i) => ({
+                    '序号': i + 1,
+                    '姓名': student.name,
+                    '身份证号': student.idCard,
+                    '原班级': student.originClass
+                }));
+                const ws = XLSX.utils.json_to_sheet(data);
+                XLSX.utils.book_append_sheet(wb, ws, cls.name);
+            });
+            
+            const date = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+            XLSX.writeFile(wb, `分班结果_${date}.xlsx`);
+        }
+        
+        // 点击弹窗外区域关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('myModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
